@@ -1,4 +1,6 @@
 import {
+  integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -23,7 +25,7 @@ export const users = pgTable(
 
 export const userRelations = relations(users, ({ many}) => ({
     videos: many(videos)
-}))
+}));
 
 export const categories = pgTable(
   "categories",
@@ -39,7 +41,12 @@ export const categories = pgTable(
 
 export const categoryRelations = relations(categories, ({ many}) => ({
     videos: many(videos)
-}))
+}));
+
+export const videoVisibility = pgEnum("video_visibility", [
+  "private",
+  "public",
+]);
 
 export const videos = pgTable("videos", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -51,6 +58,10 @@ export const videos = pgTable("videos", {
   muxPlaybackId: text("mux_playback_id").unique(),
   muxTrackId: text("mux_track_id").unique(),
   muxTrackStatus: text("mux_track_status"),
+  thumbnailUrl: text("thumbnail_url"),
+  previewUrl: text("preview_url"),
+  duration: integer("duration"),
+  visibility: videoVisibility("visibility").default("private").notNull(),
   userId: uuid("user_id").references(() => users.id, {
     onDelete: "cascade",
   }).notNull(),
@@ -70,4 +81,4 @@ export const videoRelations = relations(videos, ({ one}) => ({
         fields: [videos.categoryId],
         references: [categories.id],  
     })
-}))
+}));
