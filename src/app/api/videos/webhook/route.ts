@@ -10,6 +10,7 @@ import { mux } from "@/lib/mux";
 import { db } from "@/db";
 import { videos } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { UTApi } from "uploadthing/server";
 
 const SIGNING_SECRET = process.env.MUX_WEBHOOK_SECRET;
 
@@ -58,6 +59,7 @@ export const POST = async (request: Request) => {
     case "video.asset.ready": {
       const data = payload.data as VideoAssetReadyWebhookEvent["data"];
       const playbackId = data.playback_ids?.[0].id;
+      const duration = data.duration ? Math.round(data.duration * 1000) : 0;
 
       if (!data.upload_id)
         return new Response("Missing upload id", { status: 400 });
@@ -65,17 +67,29 @@ export const POST = async (request: Request) => {
       if (!playbackId)
         return new Response("Missing playback id", { status: 400 });
 
-      const thumbnailUrl = `https://image.mux.com/${playbackId}/thumbnail.jpg`;
-      const previewUrl = `https://image.mux.com/${playbackId}/animated.gif`;
-      const duration = data.duration ? Math.round(data.duration * 1000) : 0;
+      const tempThumbnailUrl = `https://image.mux.com/${playbackId}/thumbnail.jpg`;
+      const tempPreviewUrl = `https://image.mux.com/${playbackId}/animated.gif`;
+
+      const utapi = new UTApi();
+      const [uploadedThumbnail, uploadedPreview] =
+        await utapi.uploadFilesFromUrl([tempThumbnailUrl, tempPreviewUrl]);
+
+      if (!uploadedThumbnail.data || !uploadedPreview.data)
+        return new Response("Failed to upload files", { status: 500 });
+
+      const { key: thumbnailKey, url: thumbnailUrl } = uploadedThumbnail.data;
+      const { key: previewKey, url: previewUrl } = uploadedPreview.data;
+
       await db
         .update(videos)
         .set({
           muxPlaybackId: playbackId,
           muxStatus: data.status,
           muxAssetId: data.id,
-          thumbnailUrl,
-          previewUrl,
+          thumbnailUrl: thumbnailUrl,
+          thumbnailKey: thumbnailKey,
+          previewUrl: previewUrl,
+          previewKey: previewKey,
           duration,
         })
         .where(eq(videos.muxUploadId, data.upload_id));
